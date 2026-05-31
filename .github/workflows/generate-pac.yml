@@ -1,0 +1,98 @@
+name: Generate Obfuscated PAC Proxy with Archive
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */6 * * *'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Archive Old PAC File
+      run: |
+        # ساخت پوشه آرشیو در صورت عدم وجود
+        mkdir -p archive
+
+        # اگر فایل قدیمی وجود داشت، آن را با نام مجهز به تاریخ و ساعت به پوشه آرشیو منتقل کن
+        if [ -f "proxy.pac" ]; then
+          TIMESTAMP=$(date -u +"%Y%m%d_%H%M%S")
+          mv proxy.pac "archive/proxy_${TIMESTAMP}.pac"
+          echo "فایل قدیمی با نام proxy_${TIMESTAMP}.pac آرشیو شد."
+        else
+          echo "فایل قدیمی برای آرشیو کردن یافت نشد."
+        fi
+
+    - name: Fetch Proxy and Obfuscate PAC
+      run: |
+        # دریافت اطلاعات از API
+        RESPONSE=$(curl -s "http://pubproxy.com/api/proxy?format=json")
+        
+        IP=$(echo "$RESPONSE" | grep -o '"ip":"[^"]*' | sed 's/"ip":"//')
+        PORT=$(echo "$RESPONSE" | grep -o '"port":"[^"]*' | sed 's/"port":"//')
+        TYPE=$(echo "$RESPONSE" | grep -o '"proxy_type":"[^"]*' | sed 's/"proxy_type":"//' | tr '[:lower:]' '[:upper:]')
+
+        if [ -z "$IP" ] || [ -z "$PORT" ]; then
+          echo "خطا: موفق به دریافت پروکسی از API نشدم."
+          exit 1
+        fi
+
+        if [ "$TYPE" == "SOCKS5" ] || [ "$TYPE" == "SOCKS4" ]; then
+          PAC_TYPE="SOCKS"
+        else
+          PAC_TYPE="PROXY"
+        fi
+
+        # ساخت رشته کامل پروکسی
+        FULL_PROXY_STRING="$PAC_TYPE $IP:$PORT; DIRECT"
+        
+        # تبدیل رشته پروکسی به آرایه‌ای از کدهای ASCII برای مبهم‌سازی
+        ASCII_ARRAY=""
+        for (( i=0; i<${#FULL_PROXY_STRING}; i++ )); do
+          CHAR="${FULL_PROXY_STRING:$i:1}"
+          printf -v ASCII_CODE '%d' "'$CHAR"
+          if [ -z "$ASCII_ARRAY" ]; then
+            ASCII_ARRAY="$ASCII_CODE"
+          else
+            ASCII_ARRAY="$ASCII_ARRAY,$ASCII_CODE"
+          fi
+        done
+
+        # تولید یک کلید رندوم برای متغیرها جهت جلوگیری از یکنواختی ساختار فایل (Signature Bypass)
+        RAND_SUF=$(head /dev/urandom | tr -dc 'a-zA-Z' | head -c 6)
+
+        # ساخت فایل PAC مبهم‌سازی شده جدید
+        cat << EOF > proxy.pac
+        function FindProxyForURL(url, host) {
+            // _hash_$RAND_SUF
+            var _0x_arr_$RAND_SUF = [$ASCII_ARRAY];
+            var _0x_res_$RAND_SUF = "";
+            for (var i = 0; i < _0x_arr_$RAND_SUF.length; i++) {
+                _0x_res_$RAND_SUF += String.fromCharCode(_0x_arr_$RAND_SUF[i]);
+            }
+            return _0x_res_$RAND_SUF;
+        }
+        EOF
+
+        echo "فایل PAC جدید با موفقیت به صورت مبهم‌سازی شده تولید شد."
+
+    - name: Commit and Push Changes
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        
+        # اضافه کردن فایل جدید و پوشه آرشیو به گیت
+        git add proxy.pac archive/
+        
+        if git diff --staged --quiet; then
+          echo "هیچ تغییری در پروکسی ایجاد نشده است."
+        else
+          git commit -m "Update PAC file and archive old version [skip ci]"
+          git push
+        fi
